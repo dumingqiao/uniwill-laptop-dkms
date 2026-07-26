@@ -1,6 +1,8 @@
+_project_root="$(cd "${startdir}/../.." && pwd)"
+
 pkgname=uniwill-laptop-dkms
-pkgver=0.1.0
-pkgrel=3
+pkgver="$(<"${_project_root}/VERSION")"
+pkgrel="$(<"${_project_root}/BUILD_NUMBER")"
 pkgdesc="Uniwill laptop DKMS driver and hardware control service"
 arch=('x86_64')
 license=('GPL-2.0-or-later')
@@ -12,7 +14,7 @@ depends=(
   'libblockdev-fs'
   'libblockdev-nvme'
   'libblockdev-smart'
-  'ntfsprogs'
+  'ntfs-3g'
   'systemd'
   'xfsprogs'
 )
@@ -34,20 +36,8 @@ conflicts=(
 install=uniwill-laptop-dkms.install
 options=('!debug')
 
-_project_root="$(cd "${startdir}/../.." && pwd)"
 _dkms_name='uniwill-laptop'
-_dkms_version='0.1.0'
-
-prepare() {
-  local release_version build_number
-
-  release_version="$(<"${_project_root}/VERSION")"
-  build_number="$(<"${_project_root}/BUILD_NUMBER")"
-  [[ "${release_version}" == "${pkgver}" ]] ||
-    error "VERSION (${release_version}) does not match pkgver (${pkgver})"
-  [[ "${build_number}" == "${pkgrel}" ]] ||
-    error "BUILD_NUMBER (${build_number}) does not match pkgrel (${pkgrel})"
-}
+_dkms_version="${pkgver}"
 
 build() {
   make -B -C "${_project_root}" service
@@ -56,6 +46,8 @@ build() {
 package() {
   local dkms_source="${pkgdir}/usr/src/${_dkms_name}-${_dkms_version}"
 
+  install -Dm644 "${_project_root}/VERSION" "${dkms_source}/VERSION"
+  install -Dm644 "${_project_root}/BUILD_NUMBER" "${dkms_source}/BUILD_NUMBER"
   install -Dm644 "${_project_root}/dkms.conf" "${dkms_source}/dkms.conf"
   install -Dm644 "${_project_root}/Makefile" "${dkms_source}/Makefile"
   install -Dm644 "${_project_root}/uniwill-acpi.c" "${dkms_source}/uniwill-acpi.c"

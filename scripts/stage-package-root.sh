@@ -12,6 +12,8 @@ package_root="$1"
 version="$(<"${project_root}/VERSION")"
 dkms_source="${package_root}/usr/src/uniwill-laptop-${version}"
 
+install -Dm644 "${project_root}/VERSION" "${dkms_source}/VERSION"
+install -Dm644 "${project_root}/BUILD_NUMBER" "${dkms_source}/BUILD_NUMBER"
 install -Dm644 "${project_root}/dkms.conf" "${dkms_source}/dkms.conf"
 install -Dm644 "${project_root}/Makefile" "${dkms_source}/Makefile"
 install -Dm644 "${project_root}/uniwill-acpi.c" "${dkms_source}/uniwill-acpi.c"
@@ -54,4 +56,3 @@ install -Dm644 \
 install -Dm644 \
   "${project_root}/uniwilld-json-api.md" \
   "${package_root}/usr/share/doc/uniwill-laptop-dkms/uniwilld-json-api.md"
-

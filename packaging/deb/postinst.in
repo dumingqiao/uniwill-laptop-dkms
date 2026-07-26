@@ -4,6 +4,14 @@ set -e
 module_name="uniwill-laptop"
 module_version="@DRIVER_VERSION@"
 
+if command -v systemctl >/dev/null 2>&1; then
+  systemctl stop uniwilld.service >/dev/null 2>&1 || true
+fi
+if grep -q '^uniwill_laptop ' /proc/modules; then
+  modprobe -r "$module_name" >/dev/null 2>&1 ||
+    echo "The running Uniwill module could not be replaced; reboot to load the updated driver."
+fi
+
 if command -v dkms >/dev/null 2>&1; then
   dkms remove -m "$module_name" -v "$module_version" --all >/dev/null 2>&1 || true
   dkms add -m "$module_name" -v "$module_version" >/dev/null 2>&1 || true

@@ -3309,6 +3309,11 @@ static void __exit uniwill_exit(void)
 }
 module_exit(uniwill_exit);
 
+#ifndef UNIWILL_MODULE_VERSION
+#define UNIWILL_MODULE_VERSION "0.0.0"
+#endif
+
 MODULE_AUTHOR("Armin Wolf <W_Armin@gmx.de>");
 MODULE_DESCRIPTION("Uniwill notebook and ITE 8291 keyboard backlight driver");
+MODULE_VERSION(UNIWILL_MODULE_VERSION);
 MODULE_LICENSE("GPL");

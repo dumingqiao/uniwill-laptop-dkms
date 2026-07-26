@@ -3,6 +3,7 @@ set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 project_root="$(cd "${script_dir}/.." && pwd)"
+"${project_root}/scripts/check-version.sh"
 version="$(<"${project_root}/VERSION")"
 build_number="$(<"${project_root}/BUILD_NUMBER")"
 bundle_dir="${project_root}/dist/rpm"
@@ -35,4 +36,3 @@ rpmbuild -bb "${project_root}/packaging/rpm/uniwill-laptop-dkms.spec" \
 mkdir -p "${bundle_dir}"
 find "${rpm_root}/RPMS/x86_64" -maxdepth 1 -type f -name '*.rpm' \
   -exec cp -f -- '{}' "${bundle_dir}/" ';'
-

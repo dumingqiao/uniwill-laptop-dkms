@@ -170,7 +170,7 @@ Request:
 Response:
 
 ```json
-{"ok":true,"name":"uniwilld","version":"0.1.0","build":"1","full":"0.1.0+1"}
+{"ok":true,"name":"uniwilld","version":"0.1.1","build":"2","full":"0.1.1+2"}
 ```
 
 ### get_device_details

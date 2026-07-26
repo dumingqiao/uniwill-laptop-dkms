@@ -3,7 +3,7 @@ name: Release driver packages
 on:
   push:
     tags:
-      - "*"
+      - "v*.*.*"
 
 concurrency:
   group: release-${{ github.ref }}
@@ -13,8 +13,22 @@ permissions:
   contents: read
 
 jobs:
+  validate:
+    name: Validate release version
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Match Tag to VERSION
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: ./scripts/check-version.sh "${RELEASE_TAG}"
+
   deb:
     name: Build DEB (x86_64)
+    needs: validate
     runs-on: ubuntu-24.04
     container:
       image: debian:trixie
@@ -25,6 +39,7 @@ jobs:
           apt-get update
           apt-get install --yes --no-install-recommends \
             build-essential \
+            ca-certificates \
             dpkg-dev \
             git \
             libblockdev-dev \
@@ -50,6 +65,7 @@ jobs:
 
   rpm:
     name: Build RPM (x86_64)
+    needs: validate
     runs-on: ubuntu-24.04
     container:
       image: fedora:latest
@@ -85,6 +101,7 @@ jobs:
 
   arch:
     name: Build Arch package (x86_64)
+    needs: validate
     runs-on: ubuntu-24.04
     container:
       image: archlinux:base-devel
@@ -96,7 +113,6 @@ jobs:
           pacman -S --needed --noconfirm \
             base-devel \
             btrfs-progs \
-            clang \
             dkms \
             dosfstools \
             git \
@@ -105,10 +121,9 @@ jobs:
             libblockdev-nvme \
             libblockdev-smart \
             linux-headers \
-            llvm \
             ntfs-3g \
             pkgconf \
-            systemd-libs \
+            systemd \
             xfsprogs
 
       - name: Check out source
@@ -130,10 +145,20 @@ jobs:
               -quit
           )"
           test -n "${kernel_build_dir}"
+          compiler_args=()
+          source /etc/os-release
+          if [[ "${ID:-}" == "cachyos" ]]; then
+            compiler_args+=(LLVM=1)
+          fi
           runuser -u builder -- env HOME=/home/builder \
-            make -C "${GITHUB_WORKSPACE}" KDIR="${kernel_build_dir}" LLVM=1
+            make -C "${GITHUB_WORKSPACE}" \
+              KDIR="${kernel_build_dir}" \
+              "${compiler_args[@]}"
           runuser -u builder -- env HOME=/home/builder \
-            make -C "${GITHUB_WORKSPACE}" KDIR="${kernel_build_dir}" LLVM=1 clean
+            make -C "${GITHUB_WORKSPACE}" \
+              KDIR="${kernel_build_dir}" \
+              "${compiler_args[@]}" \
+              clean
 
       - name: Build and test Arch package
         run: |
@@ -204,14 +229,26 @@ jobs:
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
+          mapfile -d '' release_assets < <(
+            find release-assets -type f -print0
+          )
+          if (( ${#release_assets[@]} == 0 )); then
+            echo "No release assets were downloaded." >&2
+            exit 1
+          fi
+
           if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
             gh release edit "${RELEASE_TAG}" \
               --title "${RELEASE_TAG}" \
               --notes-file release-notes.md
-            gh release upload "${RELEASE_TAG}" release-assets/* --clobber
+            gh release upload \
+              "${RELEASE_TAG}" \
+              "${release_assets[@]}" \
+              --clobber
           else
-            gh release create "${RELEASE_TAG}" \
-              release-assets/* \
+            gh release create \
+              "${RELEASE_TAG}" \
+              "${release_assets[@]}" \
               --title "${RELEASE_TAG}" \
               --notes-file release-notes.md \
               --verify-tag

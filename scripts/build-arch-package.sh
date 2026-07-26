@@ -3,6 +3,7 @@ set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 project_root="$(cd "${script_dir}/.." && pwd)"
+"${project_root}/scripts/check-version.sh"
 arch_package_dir="${project_root}/packaging/arch"
 bundle_dir="${project_root}/dist/arch"
 

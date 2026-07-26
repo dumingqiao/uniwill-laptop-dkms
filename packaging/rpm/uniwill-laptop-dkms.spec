@@ -51,6 +51,11 @@ make -B -C "%{project_root}" test
 "%{project_root}/scripts/stage-package-root.sh" "%{buildroot}"
 
 %post
+systemctl stop uniwilld.service >/dev/null 2>&1 || true
+if grep -q '^uniwill_laptop ' /proc/modules; then
+  modprobe -r uniwill-laptop >/dev/null 2>&1 || \
+    echo "The running Uniwill module could not be replaced; reboot to load the updated driver."
+fi
 dkms remove -m uniwill-laptop -v %{version} --all >/dev/null 2>&1 || true
 dkms add -m uniwill-laptop -v %{version} >/dev/null 2>&1 || true
 dkms autoinstall -m uniwill-laptop -v %{version} || \

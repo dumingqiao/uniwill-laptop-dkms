@@ -1,7 +1,9 @@
 post_install() {
+  local module_version="${1%-*}"
+
   echo "Building the Uniwill DKMS module for installed kernels..."
-  dkms add -m uniwill-laptop -v 0.1.0 >/dev/null 2>&1 || true
-  dkms autoinstall -m uniwill-laptop -v 0.1.0 || \
+  dkms add -m uniwill-laptop -v "${module_version}" >/dev/null 2>&1 || true
+  dkms autoinstall -m uniwill-laptop -v "${module_version}" || \
     echo "DKMS build deferred: install the matching kernel headers, then run 'dkms autoinstall'."
 
   systemctl daemon-reload
@@ -16,13 +18,28 @@ post_install() {
 }
 
 post_upgrade() {
-  dkms remove -m uniwill-laptop -v 0.1.0 --all >/dev/null 2>&1 || true
-  post_install
+  local new_module_version="${1%-*}"
+  local old_module_version="${2%-*}"
+
+  systemctl stop uniwilld.service || true
+  if grep -q '^uniwill_laptop ' /proc/modules; then
+    if ! modprobe -r uniwill-laptop; then
+      echo "The running Uniwill module could not be replaced; reboot to load the updated driver."
+    fi
+  fi
+
+  dkms remove -m uniwill-laptop -v "${old_module_version}" --all >/dev/null 2>&1 || true
+  if [[ "${new_module_version}" != "${old_module_version}" ]]; then
+    dkms remove -m uniwill-laptop -v "${new_module_version}" --all >/dev/null 2>&1 || true
+  fi
+  post_install "$1"
 }
 
 pre_remove() {
+  local module_version="${1%-*}"
+
   systemctl disable --now uniwilld-sleep.service uniwilld.service || true
-  dkms remove -m uniwill-laptop -v 0.1.0 --all || true
+  dkms remove -m uniwill-laptop -v "${module_version}" --all || true
 }
 
 post_remove() {

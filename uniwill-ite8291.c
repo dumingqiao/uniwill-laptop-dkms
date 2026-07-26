@@ -19,6 +19,7 @@
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/string.h>
+#include <linux/sysfs.h>
 #include <linux/types.h>
 #include <linux/usb.h>
 
@@ -838,11 +839,6 @@ static const struct attribute_group ite8291r3_attr_group = {
 	.attrs = ite8291r3_attrs,
 };
 
-static const struct attribute_group *ite8291r3_attr_groups[] = {
-	&ite8291r3_attr_group,
-	NULL,
-};
-
 static int ite8291r3_probe(struct hid_device *hdev,
 			   const struct hid_device_id *id)
 {
@@ -924,7 +920,6 @@ static int ite8291r3_probe(struct hid_device *hdev,
 	led_cdev->brightness_get = ite8291r3_led_get_brightness;
 	led_cdev->brightness_set_blocking = ite8291r3_led_set_brightness;
 	led_cdev->flags = LED_CORE_SUSPENDRESUME | LED_BRIGHT_HW_CHANGED;
-	led_cdev->groups = ite8291r3_attr_groups;
 	mcled_cdev->num_colors = ARRAY_SIZE(priv->subleds);
 	mcled_cdev->subled_info = priv->subleds;
 	priv->subleds[0].color_index = LED_COLOR_ID_RED;
@@ -935,6 +930,15 @@ static int ite8291r3_probe(struct hid_device *hdev,
 	if (ret < 0)
 		goto err_free;
 
+	/*
+	 * led_classdev_multicolor_register() installs the multicolor group's
+	 * attributes by replacing led_cdev->groups. Add the controller-specific
+	 * effect attributes after registration so both groups are exposed.
+	 */
+	ret = sysfs_create_group(&led_cdev->dev->kobj, &ite8291r3_attr_group);
+	if (ret < 0)
+		goto err_unregister_led;
+
 	hid_set_drvdata(hdev, priv);
 	mutex_lock(&ite8291r3_active_lock);
 	if (!ite8291r3_active)
@@ -944,6 +948,8 @@ static int ite8291r3_probe(struct hid_device *hdev,
 		 (int)sizeof(version), version, priv->name);
 	return 0;
 
+err_unregister_led:
+	led_classdev_multicolor_unregister(mcled_cdev);
 err_free:
 	mutex_destroy(&priv->lock);
 	kfree(priv);
@@ -962,6 +968,8 @@ static void ite8291r3_remove(struct hid_device *hdev)
 	if (ite8291r3_active == priv)
 		ite8291r3_active = NULL;
 	mutex_unlock(&ite8291r3_active_lock);
+	sysfs_remove_group(&priv->mcled.led_cdev.dev->kobj,
+			   &ite8291r3_attr_group);
 	led_classdev_multicolor_unregister(&priv->mcled);
 	hid_hw_close(hdev);
 	hid_hw_stop(hdev);

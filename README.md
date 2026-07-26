@@ -192,18 +192,20 @@ Generated packages are written to `dist/deb/`, `dist/rpm/`, and `dist/arch/`.
 Register, build, and install the module for the current system:
 
 ```sh
+version="$(cat VERSION)"
 sudo dkms add "$PWD"
-sudo dkms build -m uniwill-laptop -v 0.1.0
-sudo dkms install -m uniwill-laptop -v 0.1.0
+sudo dkms build -m uniwill-laptop -v "$version"
+sudo dkms install -m uniwill-laptop -v "$version"
 ```
 
 To reinstall the same development version:
 
 ```sh
-sudo dkms remove -m uniwill-laptop -v 0.1.0 --all
+version="$(cat VERSION)"
+sudo dkms remove -m uniwill-laptop -v "$version" --all
 sudo dkms add "$PWD"
-sudo dkms build -m uniwill-laptop -v 0.1.0
-sudo dkms install -m uniwill-laptop -v 0.1.0
+sudo dkms build -m uniwill-laptop -v "$version"
+sudo dkms install -m uniwill-laptop -v "$version"
 ```
 
 ## Service installation
@@ -300,14 +302,18 @@ uniwill-touchpad-sync --status
 
 ## Versioning and releases
 
-`VERSION` contains the SemVer release (`MAJOR.MINOR.PATCH`) and `BUILD_NUMBER` contains the
-monotonically increasing package build. `uniwilld --version` prints the combined form, for example
-`0.1.0+3`; native packages use their conventional `0.1.0-3` version/release form.
+`VERSION` is the single source for the SemVer release (`MAJOR.MINOR.PATCH`). `BUILD_NUMBER` is the
+native-package revision for that source version and resets to `1` when `VERSION` changes. Driver or
+service changes increment `VERSION`; packaging-only rebuilds increment `BUILD_NUMBER`.
+`uniwilld --version` prints the combined form, for example `0.1.1+1`; native packages use their
+conventional `0.1.1-1` version/release form. The DKMS package and kernel `MODULE_VERSION` use
+`0.1.1`, because package-only rebuilds do not change the driver ABI or source.
 
-Pushing any Git tag starts the GitHub Actions release workflow. It builds x86_64 DEB, RPM, and Arch
-Linux packages in native distribution environments, uploads them to the matching GitHub Release,
-uses the Tag annotation as the release introduction, and appends commit hashes and subjects since
-the previous Tag.
+Pushing a matching `vMAJOR.MINOR.PATCH` Git tag starts the GitHub Actions release workflow. The
+workflow rejects a tag that differs from `VERSION`, builds x86_64 DEB, RPM, and Arch Linux packages
+in native distribution environments, uploads them to the matching GitHub Release, uses the Tag
+annotation as the release introduction, and appends commit hashes and subjects since the previous
+Tag.
 
 ## License
 
