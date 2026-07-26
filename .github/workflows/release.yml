@@ -1,0 +1,218 @@
+name: Release driver packages
+
+on:
+  push:
+    tags:
+      - "*"
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deb:
+    name: Build DEB (x86_64)
+    runs-on: ubuntu-24.04
+    container:
+      image: debian:trixie
+
+    steps:
+      - name: Install Debian build dependencies
+        run: |
+          apt-get update
+          apt-get install --yes --no-install-recommends \
+            build-essential \
+            dpkg-dev \
+            git \
+            libblockdev-dev \
+            libblockdev-fs-dev \
+            libblockdev-nvme-dev \
+            libblockdev-smart-dev \
+            libglib2.0-dev \
+            libsystemd-dev \
+            pkg-config
+
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Build and test DEB package
+        run: ./scripts/build-deb-package.sh
+
+      - name: Upload DEB package
+        uses: actions/upload-artifact@v4
+        with:
+          name: uniwill-laptop-dkms-deb-x86_64
+          if-no-files-found: error
+          path: dist/deb/*.deb
+
+  rpm:
+    name: Build RPM (x86_64)
+    runs-on: ubuntu-24.04
+    container:
+      image: fedora:latest
+
+    steps:
+      - name: Install Fedora build dependencies
+        run: |
+          dnf install --assumeyes --setopt=install_weak_deps=False \
+            gcc \
+            git \
+            glib2-devel \
+            libblockdev-devel \
+            libblockdev-fs-devel \
+            libblockdev-nvme-devel \
+            libblockdev-smart-devel \
+            make \
+            pkgconf-pkg-config \
+            rpm-build \
+            systemd-devel
+
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Build and test RPM package
+        run: ./scripts/build-rpm-package.sh
+
+      - name: Upload RPM package
+        uses: actions/upload-artifact@v4
+        with:
+          name: uniwill-laptop-dkms-rpm-x86_64
+          if-no-files-found: error
+          path: dist/rpm/*.rpm
+
+  arch:
+    name: Build Arch package (x86_64)
+    runs-on: ubuntu-24.04
+    container:
+      image: archlinux:base-devel
+
+    steps:
+      - name: Install Arch build dependencies
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --needed --noconfirm \
+            base-devel \
+            btrfs-progs \
+            clang \
+            dkms \
+            dosfstools \
+            git \
+            glib2 \
+            libblockdev-fs \
+            libblockdev-nvme \
+            libblockdev-smart \
+            linux-headers \
+            llvm \
+            ntfs-3g \
+            pkgconf \
+            systemd-libs \
+            xfsprogs
+
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Create an unprivileged package builder
+        run: |
+          useradd --create-home builder
+          chown -R builder:builder "${GITHUB_WORKSPACE}"
+
+      - name: Compile the kernel module
+        run: |
+          kernel_build_dir="$(
+            find /usr/lib/modules \
+              -mindepth 2 \
+              -maxdepth 2 \
+              -name build \
+              -print \
+              -quit
+          )"
+          test -n "${kernel_build_dir}"
+          runuser -u builder -- env HOME=/home/builder \
+            make -C "${GITHUB_WORKSPACE}" KDIR="${kernel_build_dir}" LLVM=1
+          runuser -u builder -- env HOME=/home/builder \
+            make -C "${GITHUB_WORKSPACE}" KDIR="${kernel_build_dir}" LLVM=1 clean
+
+      - name: Build and test Arch package
+        run: |
+          runuser -u builder -- env HOME=/home/builder \
+            bash -c "cd '${GITHUB_WORKSPACE}' && ./scripts/build-arch-package.sh"
+
+      - name: Upload Arch package
+        uses: actions/upload-artifact@v4
+        with:
+          name: uniwill-laptop-dkms-arch-x86_64
+          if-no-files-found: error
+          path: dist/arch/*.pkg.tar.zst
+
+  release:
+    name: Publish GitHub Release
+    needs:
+      - deb
+      - rpm
+      - arch
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+
+    steps:
+      - name: Check out complete history and tags
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Download release packages
+        uses: actions/download-artifact@v5
+        with:
+          merge-multiple: true
+          path: release-assets
+
+      - name: Build release notes from tag and commits
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          tag="${RELEASE_TAG}"
+          previous_tag="$(git describe --tags --abbrev=0 "${tag}^" 2>/dev/null || true)"
+
+          git for-each-ref \
+            --format='%(contents:subject)%0a%0a%(contents:body)' \
+            "refs/tags/${tag}" > tag-notes.md
+
+          if [[ -n "${previous_tag}" ]]; then
+            commit_range="${previous_tag}..${tag}"
+          else
+            commit_range="${tag}"
+          fi
+
+          {
+            cat tag-notes.md
+            echo
+            echo "## Commits"
+            echo
+            git log \
+              --no-merges \
+              --pretty=format:"- \`%h\` %s — %an" \
+              "${commit_range}"
+            echo
+          } > release-notes.md
+
+      - name: Create or update release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+            gh release edit "${RELEASE_TAG}" \
+              --title "${RELEASE_TAG}" \
+              --notes-file release-notes.md
+            gh release upload "${RELEASE_TAG}" release-assets/* --clobber
+          else
+            gh release create "${RELEASE_TAG}" \
+              release-assets/* \
+              --title "${RELEASE_TAG}" \
+              --notes-file release-notes.md \
+              --verify-tag
+          fi

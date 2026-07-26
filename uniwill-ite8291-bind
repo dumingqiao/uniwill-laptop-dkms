@@ -1,0 +1,59 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-or-later
+
+set -eu
+
+if [ "$#" -eq 0 ]; then
+	for hid_device in /sys/bus/hid/devices/*; do
+		[ -e "$hid_device" ] || continue
+		"$0" "${hid_device##*/}" || true
+	done
+	exit 0
+fi
+
+device_name="${1:-}"
+device_path="/sys/bus/hid/devices/$device_name"
+target_driver="/sys/bus/hid/drivers/uniwill-ite8291"
+generic_driver="/sys/bus/hid/drivers/hid-generic"
+
+case "$device_name" in
+	*[!0-9A-Fa-f:.-]*|'') exit 0 ;;
+esac
+
+[ -r "$device_path/uevent" ] || exit 0
+[ -d "$target_driver" ] || exit 0
+
+hid_id="$(sed -n 's/^HID_ID=//p' "$device_path/uevent")"
+case "$hid_id" in
+	0003:0000048D:00006004|0003:0000048D:00006006|0003:0000048D:0000CE00) ;;
+	*) exit 0 ;;
+esac
+
+current_driver=""
+if [ -L "$device_path/driver" ]; then
+	current_driver="$(basename "$(readlink -f "$device_path/driver")")"
+fi
+
+[ "$current_driver" = "uniwill-ite8291" ] && exit 0
+[ -z "$current_driver" ] || [ "$current_driver" = "hid-generic" ] || exit 0
+
+if [ "$current_driver" = "hid-generic" ]; then
+	printf '%s' "$device_name" > "$generic_driver/unbind"
+fi
+
+printf '%s' "$device_name" > "$target_driver/bind" || true
+
+# A driver's bind file can accept the write even if probe subsequently fails.
+# Verify the actual owner so a failed keyboard-backlight probe never leaves the
+# HID interface detached from hid-generic.
+current_driver=""
+if [ -L "$device_path/driver" ]; then
+	current_driver="$(basename "$(readlink -f "$device_path/driver")")"
+fi
+
+if [ "$current_driver" != "uniwill-ite8291" ]; then
+	if [ -d "$generic_driver" ]; then
+		printf '%s' "$device_name" > "$generic_driver/bind" || true
+	fi
+	exit 1
+fi

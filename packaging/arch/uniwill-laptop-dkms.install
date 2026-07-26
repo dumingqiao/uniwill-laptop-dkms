@@ -1,0 +1,33 @@
+post_install() {
+  echo "Building the Uniwill DKMS module for installed kernels..."
+  dkms add -m uniwill-laptop -v 0.1.0 >/dev/null 2>&1 || true
+  dkms autoinstall -m uniwill-laptop -v 0.1.0 || \
+    echo "DKMS build deferred: install the matching kernel headers, then run 'dkms autoinstall'."
+
+  systemctl daemon-reload
+  systemctl enable uniwilld.service uniwilld-sleep.service
+
+  udevadm control --reload-rules
+  udevadm trigger --subsystem-match=hid --action=add || true
+
+  modprobe uniwill-laptop || true
+  systemctl restart uniwilld.service || \
+    echo "uniwilld was enabled but could not start yet; reboot after the DKMS module is available."
+}
+
+post_upgrade() {
+  dkms remove -m uniwill-laptop -v 0.1.0 --all >/dev/null 2>&1 || true
+  post_install
+}
+
+pre_remove() {
+  systemctl disable --now uniwilld-sleep.service uniwilld.service || true
+  dkms remove -m uniwill-laptop -v 0.1.0 --all || true
+}
+
+post_remove() {
+  systemctl daemon-reload
+  systemctl reset-failed uniwilld-sleep.service uniwilld.service || true
+  udevadm control --reload-rules
+  rm -f /run/uniwilld.sock
+}

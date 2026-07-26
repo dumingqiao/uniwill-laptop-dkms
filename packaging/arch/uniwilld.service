@@ -1,0 +1,16 @@
+[Unit]
+Description=Uniwill laptop userspace control service
+After=systemd-modules-load.service
+
+[Service]
+Type=simple
+ExecStartPre=/usr/bin/modprobe uniwill-laptop
+ExecStartPre=-/usr/lib/udev/uniwill-ite8291-bind
+ExecStart=/usr/bin/uniwilld --socket-mode 0666 --fan-control
+StateDirectory=uniwilld
+StateDirectoryMode=0750
+Restart=on-failure
+RestartSec=2s
+
+[Install]
+WantedBy=multi-user.target

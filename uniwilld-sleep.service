@@ -1,0 +1,13 @@
+[Unit]
+Description=Uniwill control service suspend/resume bridge
+Before=sleep.target
+StopWhenUnneeded=yes
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/systemctl stop uniwilld.service
+ExecStop=/usr/bin/systemctl start uniwilld.service
+
+[Install]
+WantedBy=sleep.target

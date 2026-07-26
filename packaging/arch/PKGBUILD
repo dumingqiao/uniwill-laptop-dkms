@@ -1,0 +1,100 @@
+pkgname=uniwill-laptop-dkms
+pkgver=0.1.0
+pkgrel=3
+pkgdesc="Uniwill laptop DKMS driver and hardware control service"
+arch=('x86_64')
+license=('GPL-2.0-or-later')
+depends=(
+  'dkms'
+  'btrfs-progs'
+  'dosfstools'
+  'glib2'
+  'libblockdev-fs'
+  'libblockdev-nvme'
+  'libblockdev-smart'
+  'ntfsprogs'
+  'systemd'
+  'xfsprogs'
+)
+makedepends=(
+  'gcc'
+  'pkgconf'
+)
+optdepends=(
+  'linux-headers: build the DKMS module for the stock Arch kernel'
+)
+provides=(
+  'uniwill-laptop'
+  'uniwilld'
+)
+conflicts=(
+  'uniwill-laptop'
+  'uniwilld'
+)
+install=uniwill-laptop-dkms.install
+options=('!debug')
+
+_project_root="$(cd "${startdir}/../.." && pwd)"
+_dkms_name='uniwill-laptop'
+_dkms_version='0.1.0'
+
+prepare() {
+  local release_version build_number
+
+  release_version="$(<"${_project_root}/VERSION")"
+  build_number="$(<"${_project_root}/BUILD_NUMBER")"
+  [[ "${release_version}" == "${pkgver}" ]] ||
+    error "VERSION (${release_version}) does not match pkgver (${pkgver})"
+  [[ "${build_number}" == "${pkgrel}" ]] ||
+    error "BUILD_NUMBER (${build_number}) does not match pkgrel (${pkgrel})"
+}
+
+build() {
+  make -B -C "${_project_root}" service
+}
+
+package() {
+  local dkms_source="${pkgdir}/usr/src/${_dkms_name}-${_dkms_version}"
+
+  install -Dm644 "${_project_root}/dkms.conf" "${dkms_source}/dkms.conf"
+  install -Dm644 "${_project_root}/Makefile" "${dkms_source}/Makefile"
+  install -Dm644 "${_project_root}/uniwill-acpi.c" "${dkms_source}/uniwill-acpi.c"
+  install -Dm644 "${_project_root}/uniwill-wmi.c" "${dkms_source}/uniwill-wmi.c"
+  install -Dm644 "${_project_root}/uniwill-wmi.h" "${dkms_source}/uniwill-wmi.h"
+  install -Dm644 "${_project_root}/uniwill-ite8291.c" "${dkms_source}/uniwill-ite8291.c"
+  install -Dm644 "${_project_root}/uniwill-ite8291.h" "${dkms_source}/uniwill-ite8291.h"
+
+  install -Dm755 "${_project_root}/uniwilld" "${pkgdir}/usr/bin/uniwilld"
+  install -Dm755 \
+    "${_project_root}/uniwill-touchpad-sync" \
+    "${pkgdir}/usr/bin/uniwill-touchpad-sync"
+
+  install -Dm644 \
+    "${startdir}/uniwilld.service" \
+    "${pkgdir}/usr/lib/systemd/system/uniwilld.service"
+  install -Dm644 \
+    "${_project_root}/uniwilld-sleep.service" \
+    "${pkgdir}/usr/lib/systemd/system/uniwilld-sleep.service"
+  install -Dm644 \
+    "${_project_root}/uniwill-laptop.conf" \
+    "${pkgdir}/usr/lib/modules-load.d/uniwill-laptop.conf"
+  install -Dm755 \
+    "${_project_root}/uniwill-ite8291-bind" \
+    "${pkgdir}/usr/lib/udev/uniwill-ite8291-bind"
+  install -Dm644 \
+    "${_project_root}/90-uniwill-ite8291.rules" \
+    "${pkgdir}/usr/lib/udev/rules.d/90-uniwill-ite8291.rules"
+  install -Dm644 \
+    "${_project_root}/uniwill-touchpad-sync.desktop" \
+    "${pkgdir}/etc/xdg/autostart/uniwill-touchpad-sync.desktop"
+
+  install -Dm644 \
+    "${_project_root}/LICENSE" \
+    "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+  install -Dm644 \
+    "${_project_root}/README.md" \
+    "${pkgdir}/usr/share/doc/${pkgname}/README.md"
+  install -Dm644 \
+    "${_project_root}/uniwilld-json-api.md" \
+    "${pkgdir}/usr/share/doc/${pkgname}/uniwilld-json-api.md"
+}

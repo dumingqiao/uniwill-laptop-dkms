@@ -1,0 +1,4 @@
+# Bind supported ITE 8291 keyboard-backlight interfaces to uniwill-laptop.
+ACTION=="add", SUBSYSTEM=="hid", ENV{HID_ID}=="0003:0000048D:00006004", RUN+="/usr/lib/udev/uniwill-ite8291-bind %k"
+ACTION=="add", SUBSYSTEM=="hid", ENV{HID_ID}=="0003:0000048D:00006006", RUN+="/usr/lib/udev/uniwill-ite8291-bind %k"
+ACTION=="add", SUBSYSTEM=="hid", ENV{HID_ID}=="0003:0000048D:0000CE00", RUN+="/usr/lib/udev/uniwill-ite8291-bind %k"

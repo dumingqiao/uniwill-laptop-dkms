@@ -1,0 +1,13 @@
+Package: uniwill-laptop-dkms
+Version: @PACKAGE_VERSION@
+Section: kernel
+Priority: optional
+Architecture: amd64
+Maintainer: uniwill-laptop contributors
+Depends: dkms, btrfs-progs, dosfstools, kmod, libblockdev3, libblockdev-fs3, libblockdev-nvme3, libblockdev-smart3, libglib2.0-0t64 | libglib2.0-0, libsystemd0, ntfs-3g, systemd, udev, xfsprogs
+Provides: uniwill-laptop, uniwilld
+Conflicts: uniwill-laptop, uniwilld
+Description: Uniwill laptop DKMS driver and hardware control service
+ Installs the out-of-tree Uniwill laptop kernel driver through DKMS together
+ with the uniwilld hardware-control service, systemd integration, udev rules,
+ and the desktop-session touchpad synchronization helper.

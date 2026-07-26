@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Uniwill Touchpad LED Sync
+Comment=Synchronize the touchpad disabled state with its firmware indicator LED
+TryExec=uniwill-touchpad-sync
+Exec=uniwill-touchpad-sync
+NoDisplay=true
+X-GNOME-Autostart-enabled=true
+X-KDE-autostart-after=panel

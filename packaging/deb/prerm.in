@@ -1,0 +1,9 @@
+#!/bin/sh
+set -e
+
+if [ "$1" = "remove" ]; then
+  systemctl disable --now uniwilld-sleep.service uniwilld.service >/dev/null 2>&1 || true
+  dkms remove -m uniwill-laptop -v @DRIVER_VERSION@ --all >/dev/null 2>&1 || true
+fi
+
+exit 0
