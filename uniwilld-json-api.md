@@ -765,6 +765,10 @@ Response:
 {"ok":true,"fan_mode":2,"mode":"standard"}
 ```
 
+With `"source":"ac"` or `"source":"battery"`, the response also includes `base_mode`,
+the selected profile branch's normal fan mode. This remains available while Whisper or
+Benchmark temporarily overrides it.
+
 ### set_fan_mode
 
 Modes:

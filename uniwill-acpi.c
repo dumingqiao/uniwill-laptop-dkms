@@ -1354,20 +1354,22 @@ static int uniwill_set_fan_mode(struct uniwill_data *data, unsigned int fan_mode
 	if (ret < 0)
 		return ret;
 
-	ret = __uniwill_set_fan_boost(data, fan_mode == UNIWILL_FAN_MODE_BENCHMARK);
-	if (ret < 0)
-		return ret;
-
 	/*
 	 * Manual curve control owns the active fan table. Copying a firmware
 	 * preset here would overwrite that table and wait for a slow EC
 	 * handshake, only for userspace to restore the curve immediately.
+	 * Benchmark uses the EC boost bit instead of a firmware fan table.
 	 */
-	if (!data->fans_initialized) {
+	if (!data->fans_initialized && fan_mode != UNIWILL_FAN_MODE_BENCHMARK) {
 		ret = uniwill_apply_default_fan_table(fan_mode);
 		if (ret < 0)
 			return ret;
 	}
+
+	/* Firmware table selection may reassert boost, so set the boost bit last. */
+	ret = __uniwill_set_fan_boost(data, fan_mode == UNIWILL_FAN_MODE_BENCHMARK);
+	if (ret < 0)
+		return ret;
 
 	/* Benchmark owns both fans and the performance indicator until disabled. */
 	profile = READ_ONCE(data->active_performance_profile);

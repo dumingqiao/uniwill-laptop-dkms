@@ -305,9 +305,9 @@ uniwill-touchpad-sync --status
 `VERSION` is the single source for the SemVer release (`MAJOR.MINOR.PATCH`). `BUILD_NUMBER` is the
 native-package revision for that source version and resets to `1` when `VERSION` changes. Driver or
 service changes increment `VERSION`; packaging-only rebuilds increment `BUILD_NUMBER`.
-`uniwilld --version` prints the combined form, for example `0.1.1+1`; native packages use their
-conventional `0.1.1-1` version/release form. The DKMS package and kernel `MODULE_VERSION` use
-`0.1.1`, because package-only rebuilds do not change the driver ABI or source.
+`uniwilld --version` prints the combined form, for example `0.1.2+1`; native packages use their
+conventional `0.1.2-1` version/release form. The DKMS package and kernel `MODULE_VERSION` use
+`0.1.2`, because package-only rebuilds do not change the driver ABI or source.
 
 Pushing a matching `vMAJOR.MINOR.PATCH` Git tag starts the GitHub Actions release workflow. The
 workflow rejects a tag that differs from `VERSION`, builds x86_64 DEB, RPM, and Arch Linux packages

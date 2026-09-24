@@ -3107,6 +3107,10 @@ static const char *fan_level_name(int level)
 		return "standard";
 	case 3:
 		return "quiet";
+	case 4:
+		return "whisper";
+	case 5:
+		return "benchmark";
 	default:
 		return "unknown";
 	}
@@ -4600,6 +4604,11 @@ static void handle_request(struct uniwilld *svc, const char *req, char *resp, si
 		bool curve_control_active;
 		bool source_requested = json_has_key(req, "source");
 		bool apply_now = true;
+		bool saved_source = false;
+		struct source_control_state old_control = { 0 };
+		struct profile_branch old_branch = { 0 };
+		int active_profile = -1;
+		int previous_fan_mode = -1;
 		int source = -1;
 		int fan_mode;
 		int err;
@@ -4609,6 +4618,7 @@ static void handle_request(struct uniwilld *svc, const char *req, char *resp, si
 			return;
 		}
 		if (!strcmp(cmd, "get_fan_mode") && source >= 0) {
+			int base_mode = -1;
 			pthread_rwlock_rdlock(&svc->state_lock);
 			if (svc->source_controls[source].fan_mode_valid &&
 			    fan_mode_suspends_curve_control(
@@ -4621,14 +4631,20 @@ static void handle_request(struct uniwilld *svc, const char *req, char *resp, si
 			} else {
 				fan_mode = -1;
 			}
+			if (svc->active_profile >= 1 &&
+			    svc->active_profile <= PROFILE_COUNT)
+				base_mode =
+					svc->profiles[svc->active_profile - 1].branch[source].fan_mode;
 			pthread_rwlock_unlock(&svc->state_lock);
 			if (fan_mode >= FAN_MODE_PERFORMANCE &&
 			    fan_mode <= FAN_MODE_BENCHMARK) {
 				snprintf(value, sizeof(value), "%d", fan_mode);
 				snprintf(resp, resp_size,
 					 "{\"ok\":true,\"fan_mode\":%d,\"mode\":\"%s\","
-					 "\"source\":\"%s\",\"persisted\":true}\n",
-					 fan_mode, fan_mode_name(value), power_source_name(source));
+					 "\"source\":\"%s\",\"persisted\":true,"
+					 "\"base_mode\":\"%s\"}\n",
+					 fan_mode, fan_mode_name(value), power_source_name(source),
+					 fan_level_name(base_mode));
 				return;
 			}
 		}
@@ -4644,9 +4660,10 @@ static void handle_request(struct uniwilld *svc, const char *req, char *resp, si
 			if (source < 0)
 				source = svc->active_power_source;
 			if (source >= 0 && source < POWER_SOURCE_COUNT) {
-				struct source_control_state old = svc->source_controls[source];
-				int active_profile = svc->active_profile;
-				struct profile_branch old_branch = { 0 };
+				old_control = svc->source_controls[source];
+				active_profile = svc->active_profile;
+				previous_fan_mode = active_fan_mode_locked(svc);
+				saved_source = true;
 
 				if (active_profile >= 1 && active_profile <= PROFILE_COUNT)
 					old_branch =
@@ -4663,7 +4680,7 @@ static void handle_request(struct uniwilld *svc, const char *req, char *resp, si
 				apply_now = source == svc->active_power_source;
 				err = save_profile_state_locked(svc);
 				if (err < 0) {
-					svc->source_controls[source] = old;
+					svc->source_controls[source] = old_control;
 					if (active_profile >= 1 &&
 					    active_profile <= PROFILE_COUNT)
 						svc->profiles[active_profile - 1].branch[source] =
@@ -4672,7 +4689,7 @@ static void handle_request(struct uniwilld *svc, const char *req, char *resp, si
 			} else {
 				err = 0;
 			}
-			if (apply_now && source >= 0 &&
+			if (err == 0 && apply_now && source >= 0 &&
 			    !svc->source_controls[source].cpu_curve_valid &&
 			    !svc->source_controls[source].gpu_curve_valid)
 				load_default_curves(svc, fan_mode);
@@ -4695,7 +4712,22 @@ static void handle_request(struct uniwilld *svc, const char *req, char *resp, si
 
 			err = apply_fan_mode_hardware(svc, fan_mode, curve_control);
 			if (err < 0) {
-				make_error(resp, resp_size, err, "setting persisted but hardware write failed");
+				if (saved_source) {
+					pthread_rwlock_wrlock(&svc->state_lock);
+					svc->source_controls[source] = old_control;
+					if (active_profile >= 1 &&
+					    active_profile <= PROFILE_COUNT)
+						svc->profiles[active_profile - 1].branch[source] =
+							old_branch;
+					if (!old_control.cpu_curve_valid &&
+					    !old_control.gpu_curve_valid)
+						load_default_curves(svc, previous_fan_mode);
+					save_profile_state_locked(svc);
+					pthread_rwlock_unlock(&svc->state_lock);
+					apply_fan_mode_hardware(svc, previous_fan_mode,
+							   curve_control);
+				}
+				make_error(resp, resp_size, err, "failed to apply fan mode to hardware");
 				return;
 			}
 			if (curve_control_active) {

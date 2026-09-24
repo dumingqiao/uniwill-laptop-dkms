@@ -189,6 +189,9 @@ static void test_fan_mode_priority(void)
 {
 	struct uniwilld svc = { 0 };
 
+	assert(!strcmp(fan_level_name(FAN_MODE_WHISPER), "whisper"));
+	assert(!strcmp(fan_level_name(FAN_MODE_BENCHMARK), "benchmark"));
+
 	init_default_profiles(&svc);
 	assert(pthread_rwlock_init(&svc.state_lock, NULL) == 0);
 	svc.active_profile = 2;
