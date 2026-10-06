@@ -751,6 +751,10 @@ The daemon keeps the manual-curve preference and accepts/persists curve updates 
 but does not write PWM values; the saved curve resumes as soon as performance, standard, or quiet is
 selected. Passive cooling is independent and does not change this priority.
 
+When resuming a manual curve, the daemon initializes manual fan control before selecting the normal
+fan mode, so exiting Benchmark does not depend on loading an unused firmware preset. If the hardware
+transition fails, the previous saved fan mode and profile branch are restored.
+
 ### get_fan_mode
 
 Request:

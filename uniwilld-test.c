@@ -260,6 +260,99 @@ static void test_default_curve_modes_and_hysteresis(void)
 	assert(svc.cpu_curve.points[1].temp_c == 51);
 }
 
+static void test_fan_mode_hardware_transition(void)
+{
+	char directory[] = "/tmp/uniwilld-fan-transition-XXXXXX";
+	const char *names[] = { "fan_mode", "pwm1_enable", "pwm2_enable" };
+	char paths[3][PATH_MAX];
+	char value[64];
+	char response[MAX_RESPONSE];
+	struct uniwilld svc = { 0 };
+	struct uniwilld loaded = { 0 };
+	struct endpoint *mode_ep;
+	struct endpoint *pwm2_ep;
+
+	assert(mkdtemp(directory));
+	init_default_profiles(&svc);
+	assert(pthread_rwlock_init(&svc.state_lock, NULL) == 0);
+	assert(pthread_mutex_init(&svc.hardware_lock, NULL) == 0);
+	assert(pthread_mutex_init(&svc.fan_control_lock, NULL) == 0);
+	for (size_t i = 0; i < sizeof(names) / sizeof(names[0]); i++) {
+		assert(join_path(paths[i], sizeof(paths[i]), directory, names[i]) == 0);
+		int fd = open(paths[i], O_CREAT | O_RDWR | O_CLOEXEC, 0600);
+
+		assert(fd >= 0 && close(fd) == 0);
+		assert(write_text(paths[i], i == 0 ? "5\n" : "2\n") == 0);
+		assert(add_endpoint(&svc, names[i], paths[i]) == 0);
+	}
+	mode_ep = find_endpoint(&svc, "fan_mode");
+	pwm2_ep = find_endpoint(&svc, "pwm2_enable");
+	assert(mode_ep && pwm2_ep);
+
+	/* Even if selecting the normal mode fails, manual control must have
+	 * been initialized first. The old order leaves both enables at 2. */
+	snprintf(mode_ep->path, sizeof(mode_ep->path), "/dev/full");
+	assert(apply_fan_mode_hardware(&svc, FAN_MODE_STANDARD, true) == -ENOSPC);
+	for (size_t i = 1; i < 3; i++) {
+		assert(read_text(paths[i], value, sizeof(value)) == 0);
+		assert(!strcmp(value, "1"));
+	}
+	snprintf(mode_ep->path, sizeof(mode_ep->path), "%s", paths[0]);
+
+	/* Failed manual initialization must leave the mode untouched. */
+	assert(write_text(paths[0], "5\n") == 0);
+	snprintf(pwm2_ep->path, sizeof(pwm2_ep->path), "/dev/full");
+	assert(apply_fan_mode_hardware(&svc, FAN_MODE_STANDARD, true) == -ENOSPC);
+	assert(read_text(paths[0], value, sizeof(value)) == 0 && !strcmp(value, "5"));
+	assert(apply_fan_mode_hardware(&svc, FAN_MODE_QUIET, false) == -ENOSPC);
+	assert(read_text(paths[0], value, sizeof(value)) == 0 && !strcmp(value, "5"));
+	snprintf(pwm2_ep->path, sizeof(pwm2_ep->path), "%s", paths[2]);
+
+	for (int curve_control = 0; curve_control <= 1; curve_control++) {
+		for (int mode = FAN_MODE_PERFORMANCE; mode <= FAN_MODE_BENCHMARK; mode++) {
+			assert(apply_fan_mode_hardware(&svc, mode, curve_control) == 0);
+			assert(read_text(paths[0], value, sizeof(value)) == 0);
+			assert(atoi(value) == mode);
+			for (size_t i = 1; i < 3; i++) {
+				assert(read_text(paths[i], value, sizeof(value)) == 0);
+				assert(atoi(value) == (curve_control &&
+					!fan_mode_suspends_curve_control(mode) ? 1 : 2));
+			}
+		}
+	}
+
+	/* A failed exit must preserve the normal branch and the benchmark
+	 * override both in memory and in the configuration on disk. */
+	assert(join_path(svc.state_path, sizeof(svc.state_path), directory, "state.conf") == 0);
+	svc.active_profile = 2;
+	svc.active_power_source = POWER_SOURCE_AC;
+	svc.fan_curve_control_enabled = true;
+	svc.source_controls[POWER_SOURCE_AC].fan_mode = FAN_MODE_BENCHMARK;
+	svc.source_controls[POWER_SOURCE_AC].fan_mode_valid = true;
+	load_default_curves(&svc, FAN_MODE_BENCHMARK);
+	snprintf(mode_ep->path, sizeof(mode_ep->path), "/dev/full");
+	handle_request(&svc, "{\"cmd\":\"set_fan_mode\",\"mode\":\"quiet\",\"source\":\"ac\"}",
+		       response, sizeof(response));
+	assert(strstr(response, "\"ok\":false"));
+	assert(svc.profiles[1].branch[POWER_SOURCE_AC].fan_mode == FAN_MODE_STANDARD);
+	assert(active_fan_mode(&svc) == FAN_MODE_BENCHMARK);
+	assert(svc.fan_curve_control_enabled);
+	init_default_profiles(&loaded);
+	snprintf(loaded.state_path, sizeof(loaded.state_path), "%s", svc.state_path);
+	assert(load_profile_state(&loaded) == 0);
+	assert(loaded.profiles[1].branch[POWER_SOURCE_AC].fan_mode == FAN_MODE_STANDARD);
+	assert(loaded.source_controls[POWER_SOURCE_AC].fan_mode_valid);
+	assert(loaded.source_controls[POWER_SOURCE_AC].fan_mode == FAN_MODE_BENCHMARK);
+
+	pthread_mutex_destroy(&svc.fan_control_lock);
+	pthread_mutex_destroy(&svc.hardware_lock);
+	pthread_rwlock_destroy(&svc.state_lock);
+	assert(unlink(svc.state_path) == 0);
+	for (size_t i = 0; i < 3; i++)
+		assert(unlink(paths[i]) == 0);
+	assert(rmdir(directory) == 0);
+}
+
 static void test_keyboard_backlight_api(void)
 {
 	char directory[] = "/tmp/uniwilld-kbd-test-XXXXXX";
@@ -613,6 +706,7 @@ int main(void)
 	test_curve_failsafe_validation();
 	test_fan_mode_priority();
 	test_default_curve_modes_and_hysteresis();
+	test_fan_mode_hardware_transition();
 	test_keyboard_backlight_api();
 	test_cpu_frequency_profiles();
 	test_persisted_lightbar_profiles();

@@ -1598,9 +1598,13 @@ static int apply_fan_mode_hardware(struct uniwilld *svc, int fan_mode,
 
 	pthread_mutex_lock(&svc->fan_control_lock);
 	if (curve_control && !fan_mode_suspends_curve_control(fan_mode)) {
-		err = endpoint_write_int(svc, "fan_mode", fan_mode);
+		/* Initialize the manual table before selecting the normal mode.
+		 * Leaving benchmark/Whisper otherwise asks the driver to load a
+		 * firmware preset first, which can fail its EC handshake and leave
+		 * boost enabled before we ever get to restore the user's curve. */
+		err = set_manual_fan_mode(svc);
 		if (err == 0)
-			err = set_manual_fan_mode(svc);
+			err = endpoint_write_int(svc, "fan_mode", fan_mode);
 	} else {
 		/* Drop the userspace curve first so the driver can install the
 		 * selected firmware table/boost as the final fan operation. */
